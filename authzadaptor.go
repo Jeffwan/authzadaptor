@@ -6,6 +6,7 @@ import (
 	fmt "fmt"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"strconv"
 	strings "strings"
 	"time"
@@ -33,7 +34,8 @@ func (authZAdaptor AuthZAdaptor) HandleAuthzadaptor(_ context.Context, req *Hand
 		log.Warnf("skip unknown header: %v", req.Instance.Key)
 		return &HandleAuthzadaptorResponse{
 			Result: &v1beta1.CheckResult{
-				Status: rpc.Status{Code: int32(rpc.PERMISSION_DENIED)},
+				ValidDuration: config.ValidDuration,
+				// Status: rpc.Status{Code: int32(rpc.PERMISSION_DENIED)},
 			},
 		}, nil
 	}
@@ -66,8 +68,6 @@ func (authZAdaptor AuthZAdaptor) HandleAuthzadaptor(_ context.Context, req *Hand
 	})
 
 	if err != nil {
-		// skil
-
 		log.Warnf("Can not verify header: %v, err: %v", req.Instance.Key, err)
 		return &HandleAuthzadaptorResponse{
 			Result: &v1beta1.CheckResult{
@@ -76,7 +76,8 @@ func (authZAdaptor AuthZAdaptor) HandleAuthzadaptor(_ context.Context, req *Hand
 		}, nil
 	}
 
-	if _, ok := claims["email"]; !ok {
+	email, ok := claims["email"]
+	if !ok {
 		log.Errorf("Email doesn't exist in user's claim %v. This is not supported", claims)
 		return &HandleAuthzadaptorResponse{
 			Result: &v1beta1.CheckResult{
@@ -85,18 +86,38 @@ func (authZAdaptor AuthZAdaptor) HandleAuthzadaptor(_ context.Context, req *Hand
 		}, nil
 	}
 
-	if claims["email_verified"].(string) != strconv.FormatBool(true) {
-		log.Errorf("Email is not verified %v", claims["email_verified"])
-		return &HandleAuthzadaptorResponse{
-			Result: &v1beta1.CheckResult{
-				Status: rpc.Status{Code: int32(rpc.PERMISSION_DENIED)},
-			},
-		}, nil
+	// Only verify this field if it exists.
+	if val, ok := claims["email_verified"]; ok {
+		isEmailVerified := false
+
+		switch v := val.(type) {
+		case bool:
+			isEmailVerified = v
+		case string:
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				log.Warnf("Can not parse email_verified %v to bool", val)
+			} else {
+				isEmailVerified = b
+			}
+		default:
+			log.Warnf("Unknown email_verified type %v, value %v", reflect.TypeOf(v), v)
+		}
+
+		if !isEmailVerified {
+			log.Errorf("Email is not verified %v", isEmailVerified)
+			return &HandleAuthzadaptorResponse{
+				Result: &v1beta1.CheckResult{
+					Status: rpc.Status{Code: int32(rpc.PERMISSION_DENIED)},
+				},
+			}, nil
+		}
 	}
 
+	log.Infof("Return email %v", email)
 	return &HandleAuthzadaptorResponse{
 		Result: &v1beta1.CheckResult{ValidDuration: config.ValidDuration},
-		Output: &OutputMsg{Email: claims["email"].(string)},
+		Output: &OutputMsg{Email: email.(string)},
 	}, nil
 }
 
