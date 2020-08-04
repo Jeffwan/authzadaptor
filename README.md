@@ -1,3 +1,5 @@
+> Note: This has been deprecated. I move code to [awslabs/aws-alb-route-directive-adapter-for-istio](https://github.com/awslabs/aws-alb-route-directive-adapter-for-istio), please find latest version or make your contribution there.
+
 ## Development Instruction
 
 ### Istio Local Copy
